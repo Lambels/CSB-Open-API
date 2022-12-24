@@ -9,26 +9,41 @@ import (
 )
 
 type Dialogue struct {
-	Prefix string
-	R      io.Reader
-	W      io.Writer
+	Prefix          string
+	R               io.Reader
+	W               io.Writer
+	NotFoundHandler ExecFunc
 
-	Ctx    context.Context
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	NotFoundHandler ExecFunc
-
 	runningMu sync.Mutex
 	running   bool
-	pipe      io.Closer
-
-	// error shared by token generator and run loop.
-	err error
+	done      chan struct{}
 
 	// commands holds all the root commands.
 	commands   map[string]*Command
-	commandsWg sync.WaitGroup
+	exchangeWg sync.WaitGroup
+}
+
+func NewDialogue(ctx context.Context, prefix string, r io.Reader, w io.Writer, notFound ExecFunc) *Dialogue {
+	d := &Dialogue{
+		Prefix:          prefix,
+		R:               r,
+		W:               w,
+		ctx:             ctx,
+		NotFoundHandler: notFound,
+		done:            make(chan struct{}),
+		commands:        make(map[string]*Command),
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	d.ctx, d.cancel = context.WithCancel(ctx)
+	d.ctx = context.WithValue(d.ctx, outKey{}, d.W)
+
+	return d
 }
 
 // Start starts the main processing thread where values from the dialogue are dispatched
@@ -40,91 +55,57 @@ func (d *Dialogue) Start() error {
 	d.runningMu.Lock()
 	d.running = true
 	d.runningMu.Unlock()
+	defer func() {
+		// free the done channel if any closer waiting.
+		select {
+		case <-d.done:
+		default:
+		}
 
-	if d.Ctx == nil {
-		d.Ctx = context.Background()
-	}
-	d.ctx, d.cancel = context.WithCancel(d.Ctx)
+		d.runningMu.Lock()
+		d.running = false
+		d.runningMu.Unlock()
+	}()
 
-	// pipe used to decouple the processing thread from the possibly blocking
-	// read writer.
-	pR, pW := io.Pipe()
-	d.pipe = pR
+	scan := bufio.NewScanner(d.R)
+	for {
+		tkn, err := d.startExchange(scan)
+		if err != nil {
+			return err
+		}
 
-	// forward tokens to the pipe writer, they will be available in the pipe reader.
-	go d.forwardTokens(pW)
-	tokens := d.fetchTokens(pR)
-
-	for tkn := range tokens {
-		d.commandsWg.Add(1)
+		d.exchangeWg.Add(1)
 		cmd, args, err := parseRawCmd(tkn)
 		if err != nil {
-			d.commandsWg.Done()
+			d.exchangeWg.Done()
 			return err
 		}
 
 		if err := d.dispatchHandler(d.ctx, cmd, args); err != nil {
-			d.commandsWg.Done()
+			d.exchangeWg.Done()
 			return err
 		}
-		d.commandsWg.Done()
-
-		if err := d.writePrefix(); err != nil {
-			return err
-		}
+		d.exchangeWg.Done()
 	}
-	return d.err
 }
 
-func (d *Dialogue) forwardTokens(w io.WriteCloser) {
-	defer w.Close()
-
-	scan := bufio.NewScanner(d.R)
-	if err := d.writePrefix(); err != nil {
-		d.err = err
-		return
-	}
-	for scan.Scan() {
-		b := scan.Bytes()
-		b = append(b, byte('\n'))
-		if _, err := w.Write(b); err != nil {
-			d.err = err
-			return
-		}
+// startExchange engages in a new exchange with the reader.
+func (d *Dialogue) startExchange(s *bufio.Scanner) ([]string, error) {
+	select {
+	case <-d.done:
+		return nil, io.EOF
+	default:
 	}
 
-	d.err = scan.Err()
-}
+	if _, err := d.W.Write([]byte(d.Prefix)); err != nil {
+		return nil, err
+	}
 
-// fetchTokens fetches tokens from the reader sending them down the
-// returned channel.
-//
-// the returned channel is closed when:
-//
-//  1. The reader is closed.
-//
-//  2. An error is encountered when writing / reading from the read writer.
-func (d *Dialogue) fetchTokens(r io.Reader) <-chan []string {
-	ch := make(chan []string)
+	if !s.Scan() {
+		return nil, s.Err()
+	}
 
-	go func() {
-		defer close(ch)
-
-		scan := bufio.NewScanner(r)
-		for scan.Scan() {
-			s := scan.Text()
-			ch <- strings.Fields(s)
-		}
-
-		d.err = scan.Err()
-	}()
-
-	return ch
-}
-
-func (d *Dialogue) writePrefix() error {
-	_, err := d.W.Write([]byte(d.Prefix))
-	return err
+	return strings.Fields(s.Text()), nil
 }
 
 // dispatchHandler dispatches the handler for cmd if it exits or the not found handler.
@@ -156,10 +137,9 @@ func (d *Dialogue) Stop() {
 		return
 	}
 
-	d.pipe.Close()
 	d.cancel()
+	d.done <- struct{}{}
 	d.running = false
-	d.commandsWg.Wait()
 }
 
 // StopGracefully stops any future dialogue from happening whilst waiting
@@ -170,15 +150,20 @@ func (d *Dialogue) StopGracefully(ctx context.Context) {
 	d.runningMu.Lock()
 	defer d.runningMu.Unlock()
 
-	d.pipe.Close()
+	if !d.running {
+		return
+	}
+
+	var wgDone sync.WaitGroup
+	wgDone.Add(1)
+	go func() { d.done <- struct{}{}; wgDone.Done() }()
 	select {
 	case <-ctx.Done():
-		d.cancel()
-		d.commandsWg.Wait()
-
-	case <-signalWg(&d.commandsWg):
-		d.cancel()
+	case <-signalWg(&d.exchangeWg):
 	}
+
+	d.cancel()
+	wgDone.Wait()
 	d.running = false
 }
 
