@@ -1,7 +1,21 @@
 package csb
 
 type Config struct {
-	Addr        string `json:"addr"`
-	SqliteDSN   string `json:"sqlite_dsn"`
-	EngageToken string `json:"engage_token"`
+	HTTP   httpConfig   `json:"http"`
+	Sqlite sqliteConfig `json:"sqlite"`
+	Engage engageConfig `json:"engage"`
+}
+
+type engageConfig struct {
+	Token   string `json:"token"`
+	SaveNew bool   `json:"save_new"`
+}
+
+type httpConfig struct {
+	AddrBackend  string `json:"addr_backend"`
+	AddrFrontend string `json:"addr_frontend"`
+}
+
+type sqliteConfig struct {
+	DSN string `json:"dsn"`
 }
