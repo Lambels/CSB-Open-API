@@ -137,7 +137,7 @@ func (c *Command) Context() context.Context {
 
 // Parse parses a chain of commands returning a call chain and any error which occured during the
 // parsing.
-func (c *Command) Parse(args []string) (*CallChain, error) {
+func (c *Command) parse(args []string) (*CallChain, error) {
 	cc := make([]*Command, 0)
 	ptr := c
 	for ptr != nil {
@@ -196,8 +196,8 @@ func (c *Command) parseNext(args []string) (*Command, error) {
 
 // ParseAndRun is a helper function which parses the command along side with all its sub
 // commands and runs the first command in the chain.
-func (c *Command) ParseAndRun(ctx context.Context, args []string) error {
-	chain, err := c.Parse(args)
+func (c *Command) parseAndRun(ctx context.Context, args []string) error {
+	chain, err := c.parse(args)
 	if err != nil {
 		return err
 	}
