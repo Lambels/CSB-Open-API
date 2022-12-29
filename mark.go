@@ -31,18 +31,18 @@ type Mark struct {
 type MarkService interface {
 	// FindMarkByID returns a mark with the id = id.
 	//
-	// return ENOTFOUND if the mark doesent exist.
+	// return ENOTFOUND if the mark doesnt exist.
 	FindMarkByID(ctx context.Context, id int) (*Mark, error)
 
 	// FindMarksByPID returns the marks of the student with pid = pid.
 	//
-	// returns ENOTFOUND if the student doesent exist.
+	// returns ENOTFOUND if the student doesnt exist.
 	FindMarksByPID(ctx context.Context, pid int) ([]*Mark, error)
 
 	// FindMarksByPeriod find the marks of the student with pid = pid
 	// at a certain examination period.
 	//
-	// returns ENOTFOUND if the student doesent exist.
+	// returns ENOTFOUND if the student doesnt exist.
 	FindMarksByPeriod(ctx context.Context, pid int, period Period) ([]*Mark, error)
 
 	// FindMarksByPeriodRange finds the marks between the two examination periods.
@@ -56,21 +56,31 @@ type MarkService interface {
 
 	// DeleteMark permanently deletes the mark with id = id.
 	//
-	// returns ENOTFOUND if the mark doesent exit.
+	// returns ENOTFOUND if the mark doesnt exit.
 	DeleteMark(ctx context.Context, id int) error
 
 	// RefreshMarks refreshes the marks for a particular student over the exam period span
 	// provided.
+	//
+	// returns any error in the exchange.
 	RefreshMarks(ctx context.Context, pid int, from, to Period) error
 }
 
 // Period represents a period of examination, the academic year, term and importance of the exam
 // at which the mark was recieved.
 type Period struct {
-	AcademicYear *int    `json:"academic_year"`
+	AcademicYear int     `json:"academic_year"`
 	Term         *string `json:"term"`
 	// Importance differs from student to student since some students take exams in other periods.
 	Importance *string `json:"importance"`
+}
+
+func (p Period) Validate() error {
+	if p.AcademicYear < 2020 {
+		return Errorf(EINVALID, "validate: period has invalid academic year: %v", p.AcademicYear)
+	}
+
+	return nil
 }
 
 // MarksFilter hardly replicates a RenderMarks request body for engage.
