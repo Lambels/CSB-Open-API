@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -10,6 +11,9 @@ import (
 	"github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
+
+//go:embed subjects_data.sql
+var data string
 
 type DB struct {
 	DSN            string
@@ -43,6 +47,10 @@ func (db *DB) Open() error {
 		return err
 	}
 
+	if _, err := db.db.Exec(`PRAGMA foreign_keys = on;`); err != nil {
+		return err
+	}
+
 	driver, err := sqlite3.WithInstance(dbSQL, &sqlite3.Config{})
 	if err != nil {
 		return err
@@ -57,5 +65,35 @@ func (db *DB) Open() error {
 		return err
 	}
 
-	return m.Up()
+	if err := m.Up(); err != nil {
+		return err
+	}
+
+	return db.populateSubjects()
+}
+
+func (db *DB) populateSubjects() error {
+	conn, err := db.db.Conn(context.Background())
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	resp, err := conn.QueryContext(context.Background(), `SELECT COUNT(*) FROM subjects`)
+	if err != nil {
+		return err
+	}
+	defer resp.Close()
+
+	var n int
+	if err := resp.Scan(&n); err != nil {
+		return err
+	}
+
+	if n != 0 {
+		return nil
+	}
+
+	_, err = conn.ExecContext(context.Background(), data)
+	return err
 }
