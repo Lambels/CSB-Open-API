@@ -66,23 +66,6 @@ type MarkService interface {
 	RefreshMarks(ctx context.Context, pid int, from, to Period) error
 }
 
-// Period represents a period of examination, the academic year, term and importance of the exam
-// at which the mark was recieved.
-type Period struct {
-	AcademicYear int     `json:"academic_year"`
-	Term         *string `json:"term"`
-	// Importance differs from student to student since some students take exams in other periods.
-	Importance *string `json:"importance"`
-}
-
-func (p Period) Validate() error {
-	if p.AcademicYear < 2020 {
-		return Errorf(EINVALID, "validate: period has invalid academic year: %v", p.AcademicYear)
-	}
-
-	return nil
-}
-
 // MarksFilter hardly replicates a RenderMarks request body for engage.
 type MarksFilter struct {
 	// ID filters on the mark id.
