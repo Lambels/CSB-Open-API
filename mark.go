@@ -27,6 +27,28 @@ type Mark struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+func (m *Mark) Validate() error {
+	if m.StudentID == 0 {
+		return Errorf(EINVALID, "validate: mark missing student id field")
+	}
+	if m.StudentID == 0 {
+		return Errorf(EINVALID, "validate: mark missing subject id field")
+	}
+
+	ok, err := m.Period.Full()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return Errorf(EINVALID, "validate: expecting full period")
+	}
+
+	if m.Teacher == "" {
+		return Errorf(EINVALID, "validate: expecting teacher field")
+	}
+	return nil
+}
+
 // MarkService represents a mark service.
 type MarkService interface {
 	// FindMarkByID returns a mark with the id = id.
