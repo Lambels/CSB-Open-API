@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/Lambels/go-csb"
-	"github.com/Lambels/go-csb/engage"
+	csb "github.com/Lambels/CSB-Open-API"
+	"github.com/Lambels/CSB-Open-API/engage"
 )
 
 var _ csb.MarkService = (*MarkService)(nil)

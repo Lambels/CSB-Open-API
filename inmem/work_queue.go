@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/Lambels/go-csb"
+	csb "github.com/Lambels/CSB-Open-API"
 )
 
 // defaultBufSize represents the default buffer used as a queue to accumulate transactions.

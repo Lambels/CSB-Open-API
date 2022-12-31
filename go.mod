@@ -1,4 +1,4 @@
-module github.com/Lambels/go-csb
+module github.com/Lambels/CSB-Open-API
 
 go 1.19
 
