@@ -20,14 +20,17 @@ type Student struct {
 	Subjects []Subject `json:"subjects"`
 	// Marks are all the marks the student ever took.
 	Marks []*Mark `json:"marks"`
-	// Timestamp.
+	// Timestamps.
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (s *Student) Validate() error {
-	if s.PID == 0 {
-		return Errorf(EINVALID, "validate: student missing PID field")
+	if s.Name == "" {
+		return Errorf(EINVALID, "validate: student missing name field")
+	}
+	if len(s.Subjects) == 0 {
+		return Errorf(EINVALID, "validate: student has no subjects")
 	}
 
 	return nil
@@ -70,7 +73,7 @@ type StudentFilter struct {
 	AttendsSchool *bool `json:"attends_school"`
 
 	// Subjects filters on the subjects each student takes.
-	Subjects []Subject `json:"subjects"`
+	Subjects *[]Subject `json:"subjects"`
 }
 
 // RefreshStudents represents an request to the RefreshStudents serivce.
